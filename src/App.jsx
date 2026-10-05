@@ -112,7 +112,9 @@ const emptyDraft = {
 
 function App() {
   const [user, setUser] = useState(roleProfiles.siswa)
-  const [activeTab, setActiveTab] = useState('galeri')
+  const [activeTab, setActiveTab] = useState('beranda')
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [accountOpen, setAccountOpen] = useState(false)
   const [works, setWorks] = useState(initialWorks)
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('Semua')
@@ -380,6 +382,144 @@ function App() {
     </section>
   )
 
+  const renderHome = () => {
+    const feedWorks = galleryWorks
+
+    return (
+      <main className="home-content">
+        <section className="announcement-grid" aria-label="Pengumuman dan berita">
+          <button
+            type="button"
+            className="announcement-card announcement-primary"
+            onClick={() => setNotice('Pengumuman: pendaftaran Pameran Karya Siswa dibuka sampai 30 Oktober.')}
+          >
+            <span className="announcement-label">Pengumuman</span>
+            <strong>Pameran Karya Siswa 2026</strong>
+            <span className="announcement-link">Lihat detail <span aria-hidden="true">→</span></span>
+          </button>
+          <button
+            type="button"
+            className="announcement-card announcement-secondary"
+            onClick={() => setNotice('Berita terbaru: karya siswa akan dipamerkan di aula sekolah minggu ini.')}
+          >
+            <span className="announcement-label">Berita</span>
+            <strong>Kreativitas siswa, inspirasi bersama</strong>
+            <span className="announcement-link">Baca berita <span aria-hidden="true">→</span></span>
+          </button>
+        </section>
+
+        <label className="home-search">
+          <span className="search-icon" aria-hidden="true">⌕</span>
+          <input
+            type="search"
+            aria-label="Cari karya dan siswa"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Cari karya, siswa, atau kategori..."
+          />
+          {searchQuery && (
+            <button type="button" onClick={() => setSearchQuery('')} aria-label="Hapus pencarian">
+              ×
+            </button>
+          )}
+        </label>
+
+        <div className="feed-heading">
+          <div>
+            <p className="section-kicker">Ruang inspirasi</p>
+            <h1>Feed karya</h1>
+          </div>
+          <button type="button" className="feed-filter" onClick={() => setActiveTab('galeri')}>
+            Jelajahi semua <span aria-hidden="true">→</span>
+          </button>
+        </div>
+
+        {feedWorks.length === 0 ? (
+          <div className="empty-state">
+            <h3>Tidak ada karya yang cocok.</h3>
+            <p>Coba kata kunci lain untuk menemukan karya siswa.</p>
+          </div>
+        ) : (
+          <section className="home-feed" aria-label="Feed karya siswa">
+            {feedWorks.map((work) => (
+              <article key={work.id} className="feed-card">
+                <div className="feed-card-header">
+                  <div className="feed-avatar" aria-hidden="true">
+                    {work.student.split(' ').map((part) => part[0]).slice(0, 2).join('')}
+                  </div>
+                  <div className="feed-author">
+                    <strong>{work.student}</strong>
+                    <span>{work.kelas} · Karya siswa</span>
+                  </div>
+                  <button
+                    type="button"
+                    className="more-button"
+                    aria-label={`Pilihan untuk ${work.title}`}
+                    onClick={() => setSelectedWork(work)}
+                  >
+                    ···
+                  </button>
+                </div>
+
+                <button type="button" className="feed-artwork" onClick={() => setSelectedWork(work)}>
+                  <img src={work.image} alt={work.title} loading="lazy" />
+                  <span className="artwork-category">{work.category}</span>
+                </button>
+
+                <div className="feed-card-content">
+                  <div className="feed-actions">
+                    <button
+                      type="button"
+                      className={work.likedByMe ? 'feed-action liked' : 'feed-action'}
+                      aria-label={work.likedByMe ? 'Batal suka' : 'Suka karya'}
+                      onClick={() => handleLikeToggle(work.id)}
+                    >
+                      {work.likedByMe ? '♥' : '♡'} <span>{work.likes}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="feed-action"
+                      onClick={() => setSelectedWork(work)}
+                      aria-label={`${work.comments.length} komentar`}
+                    >
+                      ◯ <span>{work.comments.length}</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="feed-action save-action"
+                      onClick={() => setNotice(`Karya “${work.title}” disimpan ke koleksi.`)}
+                    >
+                      Simpan
+                    </button>
+                  </div>
+                  <h2>{work.title}</h2>
+                  <p>{work.description}</p>
+                  {work.comments[0] && (
+                    <button type="button" className="first-comment" onClick={() => setSelectedWork(work)}>
+                      <strong>{work.comments[0].author}</strong> {work.comments[0].text}
+                    </button>
+                  )}
+                </div>
+              </article>
+            ))}
+          </section>
+        )}
+
+        {user.role === 'siswa' && (
+          <button
+            type="button"
+            className="floating-post-button"
+            onClick={() => setActiveTab('upload')}
+            aria-label="Buat post baru"
+          >
+            <span aria-hidden="true">+</span>
+            <span className="floating-post-label">Post</span>
+          </button>
+        )}
+      </main>
+    )
+  }
+
   const renderUpload = () => (
     <section className="panel">
       <div className="panel-header">
@@ -560,37 +700,71 @@ function App() {
   return (
     <div className="page-shell">
       <header className="topbar">
-        <div className="brand-group">
-          <div className="brand-mark">G</div>
-          <div>
-            <div className="brand-name">Galeri Siswa</div>
-            <div className="brand-subtitle">Ruang Digital Karya Siswa</div>
-          </div>
+        <div className="topbar-brand">
+          <button
+            type="button"
+            className="menu-button"
+            aria-label={menuOpen ? 'Tutup navigasi' : 'Buka navigasi'}
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
+          <button type="button" className="brand-group" onClick={() => setActiveTab('beranda')}>
+            <span className="brand-name">Navbar</span>
+          </button>
         </div>
 
-        <nav className="main-nav" aria-label="Navigasi utama">
+        {menuOpen && (
+          <nav className="main-nav" aria-label="Navigasi utama">
           {tabs.map((tabId) => (
             <button
               key={tabId}
               type="button"
               className={activeTab === tabId ? 'nav-link active' : 'nav-link'}
-              onClick={() => setActiveTab(tabId)}
+              onClick={() => {
+                setActiveTab(tabId)
+                setMenuOpen(false)
+              }}
             >
               {renderTabLabel(tabId)}
             </button>
           ))}
-        </nav>
+          </nav>
+        )}
 
-        <div className="profile-panel">
-          <span className="role-pill">{user.role}</span>
-          <div>
-            <strong>{user.name}</strong>
-            <small>{user.kelas}</small>
-          </div>
+        <div className="account-menu">
+          <button
+            type="button"
+            className="account-trigger"
+            aria-expanded={accountOpen}
+            onClick={() => setAccountOpen((open) => !open)}
+          >
+            <span className="account-label">Account</span>
+            <span className="account-avatar" aria-hidden="true">{user.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}</span>
+          </button>
+          {accountOpen && (
+            <div className="account-popover">
+              <strong>{user.name}</strong>
+              <span>{user.kelas} · {user.role}</span>
+              <div className="account-role-actions">
+                {Object.keys(roleProfiles).map((role) => (
+                  <button key={role} type="button" onClick={() => {
+                    handleRoleSwitch(role)
+                    setAccountOpen(false)
+                  }}>
+                    {role}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
-      <section className="hero-panel">
+      {activeTab !== 'beranda' && <section className="hero-panel">
         <div className="hero-copy">
           <p className="eyebrow">Portal sekolah</p>
           <h1>Publikasi, review, dan apresiasi karya siswa dalam satu sistem.</h1>
@@ -672,13 +846,14 @@ function App() {
             </button>
           </div>
         </div>
-      </section>
+      </section>}
 
-      <div className="notice-bar" role="status" aria-live="polite">
-        {notice}
-      </div>
+      {activeTab !== 'beranda' && <>
+        <div className="notice-bar" role="status" aria-live="polite">
+          {notice}
+        </div>
 
-      <section className="summary-grid" aria-label="Ringkasan dashboard">
+        <section className="summary-grid" aria-label="Ringkasan dashboard">
         <article className="summary-card accent">
           <span className="summary-label">Karya Saya</span>
           <strong>{myWorks.length}</strong>
@@ -699,42 +874,10 @@ function App() {
           <strong>{works.reduce((total, work) => total + work.comments.length, 0)}</strong>
           <small>Interaksi publik</small>
         </article>
-      </section>
-
-      {activeTab === 'beranda' && (
-        <section className="dashboard-grid">
-          <div className="stack-panel">
-            <h3>Aktivitas terbaru</h3>
-            {works.slice(0, 3).map((work) => (
-              <div key={work.id} className="activity-item">
-                <img src={work.image} alt={work.title} />
-                <div>
-                  <strong>{work.title}</strong>
-                  <p>{work.student}</p>
-                  <span>{work.status}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="stack-panel">
-            <h3>Ringkasan review</h3>
-            <div className="mini-metric">
-              <span>Disetujui</span>
-              <strong>{works.filter((work) => work.status === 'Disetujui').length}</strong>
-            </div>
-            <div className="mini-metric">
-              <span>Ditolak</span>
-              <strong>{works.filter((work) => work.status === 'Ditolak').length}</strong>
-            </div>
-            <div className="mini-metric">
-              <span>Draft aktif</span>
-              <strong>{works.filter((work) => work.status === 'Draft').length}</strong>
-            </div>
-          </div>
         </section>
-      )}
+      </>}
 
+      {activeTab === 'beranda' && renderHome()}
       {activeTab === 'galeri' && renderGallery()}
       {activeTab === 'upload' && renderUpload()}
       {activeTab === 'review' && renderReview()}
