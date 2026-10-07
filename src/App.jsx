@@ -107,7 +107,8 @@ const emptyDraft = {
   title: '',
   category: 'Desain Grafis',
   description: '',
-  fileName: 'poster-festival.pdf',
+  fileName: '',
+  imagePreview: '',
 }
 
 function App() {
@@ -115,9 +116,14 @@ function App() {
   const [activeTab, setActiveTab] = useState('beranda')
   const [menuOpen, setMenuOpen] = useState(false)
   const [accountOpen, setAccountOpen] = useState(false)
+  const [accountPanel, setAccountPanel] = useState('')
+  const [darkMode, setDarkMode] = useState(false)
+  const [isComposerOpen, setIsComposerOpen] = useState(false)
+  const [composerError, setComposerError] = useState('')
   const [works, setWorks] = useState(initialWorks)
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('Semua')
+  const [feedSort, setFeedSort] = useState('Terbaru')
   const [statusFilter, setStatusFilter] = useState('Semua')
   const [draft, setDraft] = useState(emptyDraft)
   const [commentDrafts, setCommentDrafts] = useState({})
@@ -181,6 +187,37 @@ function App() {
     setActiveTab('beranda')
   }
 
+  const handleImageSelect = (event) => {
+    const file = event.currentTarget.files?.[0]
+    if (!file) return
+
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setNotice('Untuk post galeri, pilih file gambar dengan format yang didukung.')
+      setComposerError('Pilih file gambar dengan format yang didukung.')
+      event.currentTarget.value = ''
+      return
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setNotice('Ukuran gambar maksimal 10 MB.')
+      setComposerError('Ukuran gambar maksimal 10 MB.')
+      event.currentTarget.value = ''
+      return
+    }
+
+    setComposerError('')
+    const reader = new FileReader()
+    reader.onerror = () => setNotice('Gambar gagal dibaca. Silakan pilih file lain.')
+    reader.onload = () => {
+      setDraft((current) => ({
+        ...current,
+        fileName: file.name,
+        imagePreview: typeof reader.result === 'string' ? reader.result : '',
+      }))
+    }
+    reader.readAsDataURL(file)
+  }
+
   const handleLikeToggle = (workId) => {
     setWorks((current) =>
       current.map((work) => {
@@ -219,7 +256,16 @@ function App() {
     event.preventDefault()
 
     if (!draft.title.trim() || !draft.description.trim()) {
-      setNotice('Judul dan deskripsi karya wajib diisi sebelum mengirim untuk review.')
+      const message = 'Judul dan deskripsi karya wajib diisi sebelum mengirim untuk review.'
+      setNotice(message)
+      setComposerError(message)
+      return
+    }
+
+    if (!draft.imagePreview) {
+      const message = 'Pilih file gambar sebelum membuat post.'
+      setNotice(message)
+      setComposerError(message)
       return
     }
 
@@ -235,12 +281,14 @@ function App() {
       likedByMe: false,
       comments: [],
       reviewNote: 'Menunggu review guru.',
-      image:
+      image: draft.imagePreview ||
         'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=900&q=80',
     }
 
     setWorks((current) => [nextWork, ...current])
     setDraft(emptyDraft)
+    setComposerError('')
+    setIsComposerOpen(false)
     setActiveTab('beranda')
     setNotice('Karya berhasil dikirim untuk review.')
   }
@@ -383,7 +431,9 @@ function App() {
   )
 
   const renderHome = () => {
-    const feedWorks = galleryWorks
+    const feedWorks = [...galleryWorks].sort((a, b) =>
+      feedSort === 'Populer' ? b.likes - a.likes : b.id - a.id,
+    )
 
     return (
       <main className="home-content">
@@ -423,6 +473,32 @@ function App() {
             </button>
           )}
         </label>
+        <div className="home-filters">
+          <label>
+            <span>Filter</span>
+            <select
+              aria-label="Urutkan feed"
+              value={feedSort}
+              onChange={(event) => setFeedSort(event.target.value)}
+            >
+              <option>Terbaru</option>
+              <option>Populer</option>
+            </select>
+          </label>
+          <label>
+            <span>Kategori</span>
+            <select
+              aria-label="Filter kategori feed"
+              value={categoryFilter}
+              onChange={(event) => setCategoryFilter(event.target.value)}
+            >
+              {categories.map((category) => (
+                <option key={category}>{category}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="home-notice" role="status" aria-live="polite">{notice}</div>
 
         <div className="feed-heading">
           <div>
@@ -509,12 +585,87 @@ function App() {
           <button
             type="button"
             className="floating-post-button"
-            onClick={() => setActiveTab('upload')}
+            onClick={() => {
+              setComposerError('')
+              setIsComposerOpen(true)
+            }}
             aria-label="Buat post baru"
           >
             <span aria-hidden="true">+</span>
             <span className="floating-post-label">Post</span>
           </button>
+        )}
+
+        {isComposerOpen && (
+            <div className="modal-backdrop composer-backdrop" onClick={() => setIsComposerOpen(false)}>
+              <section
+                className="composer-modal"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="composer-title"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="composer-header">
+                  <div>
+                    <p className="section-kicker">Karya baru</p>
+                    <h2 id="composer-title">Buat post</h2>
+                  </div>
+                  <button type="button" className="close-button" onClick={() => setIsComposerOpen(false)} aria-label="Tutup">
+                    ×
+                  </button>
+                </div>
+                <form className="upload-form composer-form" onSubmit={handleSubmitDraft}>
+                  {composerError && <p className="composer-error" role="alert">{composerError}</p>}
+                  <label className="file-drop">
+                    {draft.imagePreview ? (
+                      <img src={draft.imagePreview} alt="Preview file yang dipilih" />
+                    ) : (
+                      <span className="file-drop-icon" aria-hidden="true">＋</span>
+                    )}
+                    <strong>{draft.fileName || 'Pilih gambar untuk post'}</strong>
+                    <small>JPG, PNG, atau WEBP · Maksimal 10 MB</small>
+                    <input type="file" accept="image/*" onChange={handleImageSelect} />
+                  </label>
+                  <label>
+                    <span>Caption / judul</span>
+                    <input
+                      type="text"
+                      value={draft.title}
+                      onChange={(event) => setDraft((current) => ({ ...current, title: event.target.value }))}
+                      placeholder="Beri judul untuk karya"
+                      required
+                    />
+                  </label>
+                  <div className="composer-fields">
+                    <label>
+                      <span>Kategori</span>
+                      <select
+                        value={draft.category}
+                        onChange={(event) => setDraft((current) => ({ ...current, category: event.target.value }))}
+                      >
+                        {categories.filter((category) => category !== 'Semua').map((category) => (
+                          <option key={category}>{category}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      <span>Deskripsi</span>
+                      <textarea
+                        rows="3"
+                        value={draft.description}
+                        onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))}
+                        placeholder="Ceritakan proses atau inspirasi karya"
+                        required
+                      />
+                    </label>
+                  </div>
+                  <div className="composer-footer">
+                    <span>Post akan masuk antrean review sebelum tampil di feed.</span>
+                    <button type="submit" className="primary-button">Post</button>
+                  </div>
+                </form>
+              </section>
+            </div>
         )}
       </main>
     )
@@ -571,21 +722,23 @@ function App() {
           <label>
             <span>File pendukung</span>
             <input
-              type="text"
-              value={draft.fileName}
-              onChange={(event) => setDraft((current) => ({ ...current, fileName: event.target.value }))}
+              type="file"
+              accept="image/*"
+              onChange={handleImageSelect}
             />
+            {draft.fileName && <small className="selected-file-name">{draft.fileName}</small>}
           </label>
 
           <div className="validation-box">
             <strong>Validasi upload</strong>
             <ul>
-              <li>Ukuran maksimal 100 MB</li>
-              <li>Format file aman</li>
+              <li>Gambar maksimal 10 MB</li>
+              <li>Format JPG, PNG, atau WEBP</li>
               <li>Preview ditampilkan sebelum submit</li>
             </ul>
           </div>
         </div>
+        {draft.imagePreview && <img className="upload-preview" src={draft.imagePreview} alt="Preview karya" />}
 
         <div className="action-row">
           <button type="submit" className="primary-button">Kirim untuk Review</button>
@@ -698,7 +851,7 @@ function App() {
   )
 
   return (
-    <div className="page-shell">
+    <div className={darkMode ? 'page-shell theme-dark' : 'page-shell'}>
       <header className="topbar">
         <div className="topbar-brand">
           <button
@@ -719,19 +872,34 @@ function App() {
 
         {menuOpen && (
           <nav className="main-nav" aria-label="Navigasi utama">
-          {tabs.map((tabId) => (
-            <button
-              key={tabId}
-              type="button"
-              className={activeTab === tabId ? 'nav-link active' : 'nav-link'}
-              onClick={() => {
-                setActiveTab(tabId)
-                setMenuOpen(false)
-              }}
-            >
-              {renderTabLabel(tabId)}
-            </button>
-          ))}
+            <p className="menu-section-label">Dashboard</p>
+            {Object.keys(roleProfiles).map((role) => (
+              <button
+                key={role}
+                type="button"
+                className={user.role === role ? 'nav-link active' : 'nav-link'}
+                onClick={() => {
+                  handleRoleSwitch(role)
+                  setMenuOpen(false)
+                }}
+              >
+                {role === 'siswa' ? 'Siswa' : role === 'guru' ? 'Guru' : 'Admin'}
+              </button>
+            ))}
+            <p className="menu-section-label menu-section-spaced">Navigasi</p>
+            {tabs.map((tabId) => (
+              <button
+                key={tabId}
+                type="button"
+                className={activeTab === tabId ? 'nav-link active' : 'nav-link'}
+                onClick={() => {
+                  setActiveTab(tabId)
+                  setMenuOpen(false)
+                }}
+              >
+                {renderTabLabel(tabId)}
+              </button>
+            ))}
           </nav>
         )}
 
@@ -749,16 +917,15 @@ function App() {
             <div className="account-popover">
               <strong>{user.name}</strong>
               <span>{user.kelas} · {user.role}</span>
-              <div className="account-role-actions">
-                {Object.keys(roleProfiles).map((role) => (
-                  <button key={role} type="button" onClick={() => {
-                    handleRoleSwitch(role)
-                    setAccountOpen(false)
-                  }}>
-                    {role}
-                  </button>
-                ))}
+              <div className="account-links">
+                <button type="button" onClick={() => { setAccountPanel('account'); setAccountOpen(false) }}>Account</button>
+                <button type="button" onClick={() => { setAccountPanel('profiles'); setAccountOpen(false) }}>Profiles</button>
+                <button type="button" onClick={() => { setAccountPanel('settings'); setAccountOpen(false) }}>Settings</button>
               </div>
+              <button type="button" className="theme-quick-toggle" onClick={() => setDarkMode((value) => !value)}>
+                <span>{darkMode ? 'Dark mode' : 'Light mode'}</span>
+                <span className={darkMode ? 'toggle-switch enabled' : 'toggle-switch'} aria-hidden="true"><i /></span>
+              </button>
             </div>
           )}
         </div>
@@ -906,6 +1073,64 @@ function App() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+      {accountPanel && (
+        <div className="modal-backdrop" onClick={() => setAccountPanel('')}>
+          <section
+            className="account-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="account-modal-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button type="button" className="close-button" onClick={() => setAccountPanel('')} aria-label="Tutup">
+              ×
+            </button>
+            {accountPanel === 'account' && (
+              <>
+                <p className="section-kicker">Account</p>
+                <h2 id="account-modal-title">Profil akun</h2>
+                <div className="account-details">
+                  <span className="account-avatar large" aria-hidden="true">
+                    {user.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}
+                  </span>
+                  <div><strong>{user.name}</strong><span>{user.role} · {user.kelas}</span></div>
+                </div>
+                <p className="account-id">ID akun: {user.nisn}</p>
+              </>
+            )}
+            {accountPanel === 'profiles' && (
+              <>
+                <p className="section-kicker">Profiles</p>
+                <h2 id="account-modal-title">Pilih profil demo</h2>
+                <div className="profile-options">
+                  {Object.entries(roleProfiles).map(([role, profile]) => (
+                    <button key={role} type="button" onClick={() => {
+                      handleRoleSwitch(role)
+                      setAccountPanel('')
+                    }}>
+                      <span className="account-avatar" aria-hidden="true">
+                        {profile.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}
+                      </span>
+                      <span><strong>{profile.name}</strong><small>{role} · {profile.kelas}</small></span>
+                      {user.role === role && <span className="profile-selected">Aktif</span>}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            {accountPanel === 'settings' && (
+              <>
+                <p className="section-kicker">Settings</p>
+                <h2 id="account-modal-title">Pengaturan tampilan</h2>
+                <label className="settings-toggle">
+                  <span><strong>Dark mode</strong><small>Ubah tampilan aplikasi</small></span>
+                  <input type="checkbox" checked={darkMode} onChange={(event) => setDarkMode(event.target.checked)} />
+                </label>
+              </>
+            )}
+          </section>
         </div>
       )}
     </div>
