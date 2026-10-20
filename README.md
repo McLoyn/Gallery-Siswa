@@ -1,16 +1,12 @@
-# React + Vite
+# Galeri Siswa — prototype (React + Vite)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+    npm install
+    npm run dev
 
-Currently, two official plugins are available:
+Peran (Siswa / Guru / Admin) diganti lewat dropdown di navbar (khusus demo). Data hanya di memori; refresh = reset.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Alur yang bisa dicoba
+- Siswa: cari + filter kategori, buka karya, tombol mengambang "+ Unggah karya" (maks. 100 MB, kategori dan teks alternatif wajib), "Karya saya" (status, catatan guru, Perbaiki karya).
+- Guru: Antrean tinjauan (Setujui / Minta revisi dengan catatan wajib) → karya yang disetujui muncul di beranda.
+- Guru & Admin: Pengumuman (buat, edit, sematkan, terbitkan, hapus) → yang berstatus Terbit tampil di beranda.
+- Admin: Ringkasan (angka dihitung dari data) dan aktif/nonaktifkan akun.
