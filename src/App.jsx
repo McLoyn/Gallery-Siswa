@@ -14,13 +14,16 @@ export default function App() {
   const [works, setWorks] = useState(W0)
   const [anns, setAnns] = useState(A0)
   const [accts, setAccts] = useState(ACC0)
+  const [open, setOpen] = useState(false)
+  const [dark, setDark] = useState(false)
+  const toggleDark = () => { const t = !dark; setDark(t); document.documentElement.dataset.theme = t ? 'dark' : 'light' }
   const go = (n, p = {}) => { setView({ n, ...p }); window.scrollTo(0, 0) }
   const first = { siswa: 'home', guru: 'queue', admin: 'admin' }
   const menu = { siswa: [['home', 'Jelajahi'], ['mine', 'Karya saya']], guru: [['queue', 'Antrean tinjauan'], ['anns', 'Pengumuman']], admin: [['admin', 'Ringkasan'], ['anns', 'Pengumuman']] }[role]
   const pickRole = r => { setRole(r); go(first[r]) }
   const upd = (id, patch) => setWorks(ws => ws.map(w => (w.id === id ? { ...w, ...patch } : w)))
-  const V = { home: Home, detail: Detail, upload: Upload, mine: Mine, queue: Queue, anns: Anns, admin: Admin }[view.n]
-  const P = { role, works, setWorks, upd, anns, setAnns, accts, setAccts, go, view }
+  const V = { home: Home, detail: Detail, upload: Upload, mine: Mine, queue: Queue, anns: Anns, admin: Admin, profile: Profile, settings: Settings }[view.n]
+  const P = { role, works, setWorks, upd, anns, setAnns, accts, setAccts, go, view, dark, toggleDark }
   return (
     <>
       <header className="nav">
@@ -30,7 +33,14 @@ export default function App() {
         <select aria-label="Peran (khusus demo)" value={role} onChange={e => pickRole(e.target.value)}>
           <option value="siswa">Siswa</option><option value="guru">Guru</option><option value="admin">Admin</option>
         </select>
-        <span className="av">{{ siswa: 'AP', guru: 'RW', admin: 'DP' }[role]}</span>
+        <button className="av" aria-label="Menu akun" onClick={() => setOpen(!open)}>{{ siswa: 'AP', guru: 'RW', admin: 'DP' }[role]}</button>
+        {open && (
+          <div className="card pop">
+            {role === 'siswa' && <button className="lnk2" onClick={() => { setOpen(false); go('profile', { name: ME }) }}>Profil saya</button>}
+            <button className="lnk2" onClick={() => { setOpen(false); go('settings') }}>Pengaturan</button>
+            <label className="ck"><input type="checkbox" checked={dark} onChange={toggleDark} />Mode gelap</label>
+          </div>
+        )}
       </header>
       <main><V {...P} /></main>
       {role === 'siswa' && view.n !== 'upload' && (
@@ -92,7 +102,7 @@ function Detail({ works, upd, view, go }) {
         <div className="card pad">
           <Badge k="ok">✓ Disetujui guru</Badge>
           <h2 style={{ marginTop: 8 }}>{w.title}</h2>
-          <p><b>{w.by}</b> <span className="mut">· {w.cls}</span></p>
+          <p><button className="lnk2" onClick={() => go('profile', { name: w.by })}>{w.by}</button> <span className="mut">· {w.cls}</span></p>
           <p className="mut">{w.desc}</p><p className="mut">Kategori: {w.cat}</p>
           <div className="row" style={{ margin: '12px 0' }}>
             <button className="btn" onClick={() => { upd(w.id, { likes: w.likes + (liked ? -1 : 1) }); setLiked(!liked) }}>{liked ? 'Batal suka' : 'Suka'} · {w.likes}</button>
@@ -261,6 +271,44 @@ function Admin({ works, accts, setAccts }) {
         <table><tbody>{accts.map(a => (
           <tr key={a.id}><td><b>{a.name}</b><div className="mut">{a.role}</div></td><td><Badge k={a.on ? 'ok' : 'gr'}>{a.on ? 'Aktif' : 'Nonaktif'}</Badge></td>
             <td><button className={'btn ' + (a.on ? 'd' : 'g')} onClick={() => setAccts(x => x.map(i => (i.id === a.id ? { ...i, on: !i.on } : i)))}>{a.on ? 'Nonaktifkan' : 'Aktifkan'}</button></td></tr>))}</tbody></table>
+      </div>
+    </section>
+  )
+}
+
+function Profile({ works, view, go }) {
+  const name = view.name
+  const mine = works.filter(w => w.by === name && w.status === 'approved')
+  const first = works.find(w => w.by === name)
+  const [fol, setFol] = useState(false)
+  const init = name.split(' ').map(s => s[0]).join('').slice(0, 2)
+  return (
+    <section>
+      <button className="btn g" onClick={() => go('home')}>← Kembali</button>
+      <div className="card" style={{ marginTop: 16 }}>
+        <Ph cat={first ? first.cat : 'Pengumuman'} h={160} />
+        <div className="pad row">
+          <span className="av big">{init}</span>
+          <div className="sp"><h2 style={{ margin: 0 }}>{name}</h2><div className="mut">{first ? first.cls : ''}</div><Badge k="ok">✓ Terbuka untuk umpan balik</Badge></div>
+          {name !== ME && <button className={'btn' + (fol ? ' o' : '')} onClick={() => setFol(!fol)}>{fol ? 'Mengikuti' : 'Ikuti'}</button>}
+        </div>
+        <div className="pad row"><b>{mine.length}</b><span className="mut">karya disetujui</span><b>{148 + (fol ? 1 : 0)}</b><span className="mut">pengikut</span></div>
+      </div>
+      <h2>Karya</h2>
+      <div className="grid3">{mine.map(w => <WorkCard key={w.id} w={w} onClick={() => go('detail', { id: w.id })} />)}</div>
+      {!mine.length && <p className="mut">Belum ada karya yang disetujui.</p>}
+      <p className="mut">Hanya nama depan dan kelas yang tampil. Pesan langsung dinonaktifkan untuk akun siswa.</p>
+    </section>
+  )
+}
+
+function Settings({ dark, toggleDark }) {
+  return (
+    <section style={{ maxWidth: 560 }}>
+      <h2>Pengaturan</h2>
+      <div className="card pad">
+        <label className="ck"><input type="checkbox" checked={dark} onChange={toggleDark} />Mode gelap</label>
+        <label className="ck"><input type="checkbox" defaultChecked />Beri tahu saya saat ada keputusan baru dari guru</label>
       </div>
     </section>
   )
