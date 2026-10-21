@@ -1,15 +1,17 @@
 import { useState } from 'react'
 import { CATS, COLORS, W0, A0, ACC0 } from './data'
+import Login from './Login'
+import './login.css'
 
-const ME = 'Alya Putri'
 const MAX = 100 * 1024 * 1024 // batas unggah 100 MB
 const ST = { pending: ['Menunggu ditinjau', 'wt'], revision: ['Perlu revisi', 'rv'], approved: ['Disetujui', 'ok'] }
+const initials = n => n.split(' ').map(s => s[0]).join('').slice(0, 2).toUpperCase()
 const Badge = ({ k, children }) => <span className={'badge ' + k}>{children}</span>
 const Ph = ({ cat, h = 170 }) => <div className="ph" style={{ background: COLORS[cat] || '#e2e8f0', height: h }}>{cat}</div>
 const Field = ({ label, error, children }) => <div><label>{label}</label>{children}{error && <div className="err">{error}</div>}</div>
 
 export default function App() {
-  const [role, setRole] = useState('siswa')
+  const [session, setSession] = useState(null) // { role: 'siswa' | 'guru' | 'admin' | 'tamu', name }
   const [view, setView] = useState({ n: 'home' })
   const [works, setWorks] = useState(W0)
   const [anns, setAnns] = useState(A0)
@@ -18,26 +20,32 @@ export default function App() {
   const [dark, setDark] = useState(false)
   const toggleDark = () => { const t = !dark; setDark(t); document.documentElement.dataset.theme = t ? 'dark' : 'light' }
   const go = (n, p = {}) => { setView({ n, ...p }); window.scrollTo(0, 0) }
-  const first = { siswa: 'home', guru: 'queue', admin: 'admin' }
-  const menu = { siswa: [['home', 'Jelajahi'], ['mine', 'Karya saya']], guru: [['queue', 'Antrean tinjauan'], ['anns', 'Pengumuman']], admin: [['admin', 'Ringkasan'], ['anns', 'Pengumuman']] }[role]
-  const pickRole = r => { setRole(r); go(first[r]) }
+  const login = s => { setSession(s); setOpen(false); setView({ n: { siswa: 'home', guru: 'queue', admin: 'admin', tamu: 'home' }[s.role] }); window.scrollTo(0, 0) }
+  const logout = () => { setSession(null); setOpen(false); setView({ n: 'home' }) }
   const upd = (id, patch) => setWorks(ws => ws.map(w => (w.id === id ? { ...w, ...patch } : w)))
+
+  if (!session) return <Login accts={accts} onLogin={login} />
+
+  const { role, name: me } = session
+  const guest = role === 'tamu'
+  const menu = { siswa: [['home', 'Jelajahi'], ['mine', 'Karya saya']], guru: [['queue', 'Antrean tinjauan'], ['anns', 'Pengumuman']], admin: [['admin', 'Ringkasan'], ['anns', 'Pengumuman']], tamu: [['home', 'Jelajahi']] }[role]
   const V = { home: Home, detail: Detail, upload: Upload, mine: Mine, queue: Queue, anns: Anns, admin: Admin, profile: Profile, settings: Settings }[view.n]
-  const P = { role, works, setWorks, upd, anns, setAnns, accts, setAccts, go, view, dark, toggleDark }
+  const P = { role, me, guest, works, setWorks, upd, anns, setAnns, accts, setAccts, go, view, dark, toggleDark, logout }
   return (
     <>
       <header className="nav">
-        <b className="brand" onClick={() => pickRole(role)}>Galeri Siswa</b>
+        <b className="brand" onClick={() => login(session)}>Galeri Siswa</b>
         {menu.map(([n, l]) => <button key={n} className={'lnk' + (view.n === n ? ' on' : '')} onClick={() => go(n)}>{l}</button>)}
         <span className="sp" />
-        <select aria-label="Peran (khusus demo)" value={role} onChange={e => pickRole(e.target.value)}>
-          <option value="siswa">Siswa</option><option value="guru">Guru</option><option value="admin">Admin</option>
-        </select>
-        <button className="av" aria-label="Menu akun" onClick={() => setOpen(!open)}>{{ siswa: 'AP', guru: 'RW', admin: 'DP' }[role]}</button>
+        {guest
+          ? <button className="btn" onClick={logout}>Masuk</button>
+          : <button className="btn g" onClick={logout}>Keluar</button>}
+        <button className="av" aria-label="Menu akun" onClick={() => setOpen(!open)}>{guest ? 'T' : initials(me)}</button>
         {open && (
           <div className="card pop">
-            {role === 'siswa' && <button className="lnk2" onClick={() => { setOpen(false); go('profile', { name: ME }) }}>Profil saya</button>}
-            <button className="lnk2" onClick={() => { setOpen(false); go('settings') }}>Pengaturan</button>
+            {guest && <p className="mut">Mode tamu · hanya bisa melihat</p>}
+            {role === 'siswa' && <button className="lnk2" onClick={() => { setOpen(false); go('profile', { name: me }) }}>Profil saya</button>}
+            {!guest && <button className="lnk2" onClick={() => { setOpen(false); go('settings') }}>Pengaturan</button>}
             <label className="ck"><input type="checkbox" checked={dark} onChange={toggleDark} />Mode gelap</label>
           </div>
         )}
@@ -89,7 +97,7 @@ function Home({ works, anns, go }) {
   )
 }
 
-function Detail({ works, upd, view, go }) {
+function Detail({ works, upd, view, go, guest, logout }) {
   const w = works.find(x => x.id === view.id)
   const [liked, setLiked] = useState(false)
   const [c, setC] = useState('')
@@ -105,20 +113,26 @@ function Detail({ works, upd, view, go }) {
           <p><button className="lnk2" onClick={() => go('profile', { name: w.by })}>{w.by}</button> <span className="mut">· {w.cls}</span></p>
           <p className="mut">{w.desc}</p><p className="mut">Kategori: {w.cat}</p>
           <div className="row" style={{ margin: '12px 0' }}>
-            <button className="btn" onClick={() => { upd(w.id, { likes: w.likes + (liked ? -1 : 1) }); setLiked(!liked) }}>{liked ? 'Batal suka' : 'Suka'} · {w.likes}</button>
+            <button className="btn" disabled={guest} onClick={() => { upd(w.id, { likes: w.likes + (liked ? -1 : 1) }); setLiked(!liked) }}>{liked ? 'Batal suka' : 'Suka'} · {w.likes}</button>
           </div>
           <h3>Komentar</h3>
-          <p className="mut">Komentar ditinjau guru sebelum tampil.</p>
-          <div className="row"><input className="in" aria-label="Komentar" placeholder="Tulis komentar yang baik…" value={c} onChange={e => setC(e.target.value)} />
-            <button className="btn" onClick={() => { if (c.trim()) { setSent(true); setC('') } }}>Kirim</button></div>
-          {sent && <p className="mut">Komentar terkirim dan menunggu ditinjau guru.</p>}
+          {guest ? (
+            <p className="mut">Mode tamu hanya bisa melihat. <button className="lnk2 inl" onClick={logout}>Masuk</button> untuk menyukai dan berkomentar.</p>
+          ) : (
+            <>
+              <p className="mut">Komentar ditinjau guru sebelum tampil.</p>
+              <div className="row"><input className="in" aria-label="Komentar" placeholder="Tulis komentar yang baik…" value={c} onChange={e => setC(e.target.value)} />
+                <button className="btn" onClick={() => { if (c.trim()) { setSent(true); setC('') } }}>Kirim</button></div>
+              {sent && <p className="mut">Komentar terkirim dan menunggu ditinjau guru.</p>}
+            </>
+          )}
         </div>
       </div>
     </section>
   )
 }
 
-function Upload({ works, setWorks, upd, view, go }) {
+function Upload({ works, setWorks, upd, view, go, me }) {
   const ed = works.find(x => x.id === view.id)
   const [f, setF] = useState(ed || { title: '', desc: '', cat: '', alt: '', file: 'berkas-sebelumnya' })
   const [file, setFile] = useState(ed ? 'berkas-sebelumnya' : '')
@@ -140,7 +154,7 @@ function Upload({ works, setWorks, upd, view, go }) {
     setErr(er)
     if (Object.keys(er).length) return
     const data = { title: f.title, desc: f.desc, cat: f.cat, alt: f.alt, status: 'pending', note: '' }
-    if (ed) upd(ed.id, data); else setWorks([{ ...data, id: Date.now(), by: ME, cls: 'XI TITL 2', likes: 0 }, ...works])
+    if (ed) upd(ed.id, data); else setWorks([{ ...data, id: Date.now(), by: me, cls: 'XI TITL 2', likes: 0 }, ...works])
     go('mine')
   }
   return (
@@ -167,11 +181,12 @@ function Upload({ works, setWorks, upd, view, go }) {
   )
 }
 
-function Mine({ works, go }) {
-  const mine = works.filter(w => w.by === ME)
+function Mine({ works, go, me }) {
+  const mine = works.filter(w => w.by === me)
   return (
     <section>
       <h2>Karya saya</h2>
+      {!mine.length && <p className="mut">Kamu belum mengunggah karya.</p>}
       {mine.map(w => {
         const [l, k] = ST[w.status]
         return (
@@ -276,21 +291,20 @@ function Admin({ works, accts, setAccts }) {
   )
 }
 
-function Profile({ works, view, go }) {
+function Profile({ works, view, go, me, guest }) {
   const name = view.name
   const mine = works.filter(w => w.by === name && w.status === 'approved')
   const first = works.find(w => w.by === name)
   const [fol, setFol] = useState(false)
-  const init = name.split(' ').map(s => s[0]).join('').slice(0, 2)
   return (
     <section>
       <button className="btn g" onClick={() => go('home')}>← Kembali</button>
       <div className="card" style={{ marginTop: 16 }}>
         <Ph cat={first ? first.cat : 'Pengumuman'} h={160} />
         <div className="pad row">
-          <span className="av big">{init}</span>
+          <span className="av big">{initials(name)}</span>
           <div className="sp"><h2 style={{ margin: 0 }}>{name}</h2><div className="mut">{first ? first.cls : ''}</div><Badge k="ok">✓ Terbuka untuk umpan balik</Badge></div>
-          {name !== ME && <button className={'btn' + (fol ? ' o' : '')} onClick={() => setFol(!fol)}>{fol ? 'Mengikuti' : 'Ikuti'}</button>}
+          {name !== me && !guest && <button className={'btn' + (fol ? ' o' : '')} onClick={() => setFol(!fol)}>{fol ? 'Mengikuti' : 'Ikuti'}</button>}
         </div>
         <div className="pad row"><b>{mine.length}</b><span className="mut">karya disetujui</span><b>{148 + (fol ? 1 : 0)}</b><span className="mut">pengikut</span></div>
       </div>
