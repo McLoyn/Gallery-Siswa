@@ -1,23 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
+import { USERS, ROLE_LABEL } from './data'
 
-// Akun demo. Di produksi, ganti pencarian ini dengan panggilan ke server.
-const USERS = [
-  { no: '0051234567', name: 'Alya Putri', role: 'siswa', cls: 'XI TITL 2' },
-  { no: '0061234501', name: 'Zahra Nabila', role: 'siswa', cls: 'X TITL 1' },
-  { no: '0041234502', name: 'Arga Saputra', role: 'siswa', cls: 'XII TITL 1' },
-  { no: '198504122010012005', name: 'Rina Wulandari', role: 'guru', cls: 'Seni Budaya' },
-  { no: '197901012005011001', name: 'Dewi Pratiwi', role: 'admin', cls: 'Tata Usaha' },
-]
+// Fitur demo (kartu contoh, daftar akun contoh) hanya aktif saat `npm run dev`, tidak ikut build produksi.
+const DEV = import.meta.env.DEV
 const TABS = { siswa: { label: 'Siswa', field: 'NISN', len: 10 }, staf: { label: 'Guru & staf', field: 'NIP', len: 18 } }
-const ROLE_LABEL = { siswa: 'Siswa', guru: 'Guru', admin: 'Admin' }
 
 // Cari akun dari nomor mentah. Mengembalikan { user } atau { error }.
+// Nomor harus satu rangkaian digit utuh (10 atau 18 digit). Rangkaian 12 digit tidak dipotong jadi 10.
+// Di produksi, ganti pencarian ini dengan panggilan ke server.
 function findUser(raw, accts) {
-  const m = String(raw).match(/\d{18}|\d{10}/)
+  const m = String(raw).match(/(?<!\d)(\d{18}|\d{10})(?!\d)/)
   if (!m) return { error: 'Kode pada kartu tidak dikenali. Coba pindai ulang atau isi manual.' }
-  const user = USERS.find(u => u.no === m[0])
+  const user = USERS.find(u => u.no === m[1])
   if (!user) return { error: 'Nomor belum terdaftar. Periksa kembali atau hubungi tata usaha.' }
-  const acct = accts.find(a => a.name === user.name)
+  const acct = accts.find(a => a.id === user.id)
   if (acct && !acct.on) return { error: 'Akun ini nonaktif. Hubungi admin sekolah.' }
   return { user }
 }
@@ -37,7 +33,7 @@ function Scanner({ onResult, onClose }) {
         video.current.srcObject = stream
         await video.current.play()
         setOk(true)
-        if (!('BarcodeDetector' in window)) { setMsg('Peramban ini belum bisa membaca kode otomatis. Gunakan isi manual atau kartu contoh.'); return }
+        if (!('BarcodeDetector' in window)) { setMsg('Peramban ini belum bisa membaca kode otomatis. Gunakan isi manual.'); return }
         const det = new window.BarcodeDetector({ formats: ['qr_code', 'code_128', 'code_39', 'ean_13'] })
         setMsg('Arahkan QR atau barcode kartu ke dalam bingkai')
         const tick = async () => {
@@ -58,7 +54,7 @@ function Scanner({ onResult, onClose }) {
       </div>
       <p className="mut" role="status">{msg}</p>
       <div className="row">
-        <button type="button" className="btn o" onClick={() => cb.current(USERS[0].no)}>Pakai kartu contoh</button>
+        {DEV && <button type="button" className="btn o" onClick={() => cb.current(USERS[0].no)}>Pakai kartu contoh</button>}
         <button type="button" className="btn g" onClick={onClose}>Tutup kamera</button>
       </div>
     </div>
@@ -75,7 +71,8 @@ export default function Login({ accts, onLogin }) {
   const finish = r => {
     if (r.error) { setErr(r.error); setScan(false); return }
     setErr('')
-    onLogin({ role: r.user.role, name: r.user.name, no: r.user.no })
+    const { id, role, name, cls } = r.user
+    onLogin({ id, role, name, cls })
   }
   const submit = e => {
     e.preventDefault()
@@ -84,7 +81,7 @@ export default function Login({ accts, onLogin }) {
     if (r.user && (tab === 'siswa') !== (r.user.role === 'siswa')) { setErr(`Nomor ini bukan ${t.field}. Pilih tab ${tab === 'siswa' ? 'Guru & staf' : 'Siswa'}.`); return }
     finish(r)
   }
-  const demo = USERS.filter(u => u.role !== 'siswa' || u.name === 'Alya Putri')
+  const demo = USERS.filter(u => u.on && (u.role !== 'siswa' || u.id === 'u1'))
 
   return (
     <div className="lg">
@@ -123,10 +120,12 @@ export default function Login({ accts, onLogin }) {
           <button className="btn lg-full" style={{ marginTop: 12 }}>Masuk</button>
         </form>
 
-        <details className="lg-demo">
-          <summary>Akun contoh untuk prototipe</summary>
-          {demo.map(u => <button key={u.no} type="button" className="lnk2" onClick={() => { setTab(u.role === 'siswa' ? 'siswa' : 'staf'); setNum(u.no); setErr('') }}>{ROLE_LABEL[u.role]} · {u.name} · {u.no}</button>)}
-        </details>
+        {DEV && (
+          <details className="lg-demo">
+            <summary>Akun contoh untuk prototipe (hanya mode dev)</summary>
+            {demo.map(u => <button key={u.id} type="button" className="lnk2" onClick={() => { setTab(u.role === 'siswa' ? 'siswa' : 'staf'); setNum(u.no); setErr('') }}>{ROLE_LABEL[u.role]} · {u.name} · {u.no}</button>)}
+          </details>
+        )}
 
         <div className="lg-or"><span>belum punya akun?</span></div>
         <button type="button" className="btn g lg-full" onClick={() => onLogin({ role: 'tamu', name: 'Tamu' })}>Lanjut sebagai tamu</button>

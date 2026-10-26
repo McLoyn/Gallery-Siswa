@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { CATS, COLORS, W0, A0, ACC0 } from './data'
+import { CATS, COLORS, W0, A0, ACC0, userById } from './data'
 import Login from './Login'
 import './login.css'
 
@@ -22,7 +22,7 @@ const Field = ({ id, label, error, group, children }) => (
 const errProps = (id, error) => ({ id, 'aria-invalid': !!error, 'aria-describedby': error ? id + '-err' : undefined })
 
 export default function App() {
-  const [session, setSession] = useState(null) // { role: 'siswa' | 'guru' | 'admin' | 'tamu', name }
+  const [session, setSession] = useState(null) // { role: 'siswa' | 'guru' | 'admin' | 'tamu', id, name, cls } (tamu tidak punya id)
   const [view, setView] = useState({ n: 'home' })
   const [works, setWorks] = useState(W0)
   const [anns, setAnns] = useState(A0)
@@ -50,11 +50,11 @@ export default function App() {
 
   if (!session) return <Login accts={accts} onLogin={login} />
 
-  const { role, name: me } = session
+  const { role, name: me, id: meId, cls: myCls } = session
   const guest = role === 'tamu'
   const menu = { siswa: [['home', 'Jelajahi'], ['mine', 'Karya saya']], guru: [['queue', 'Antrean tinjauan'], ['anns', 'Pengumuman']], admin: [['admin', 'Ringkasan'], ['anns', 'Pengumuman']], tamu: [['home', 'Jelajahi']] }[role]
   const V = { home: Home, detail: Detail, upload: Upload, mine: Mine, queue: Queue, anns: Anns, admin: Admin, profile: Profile, settings: Settings }[view.n]
-  const P = { role, me, guest, works, setWorks, upd, anns, setAnns, accts, setAccts, go, view, dark, toggleDark, logout }
+  const P = { role, me, meId, myCls, guest, works, setWorks, upd, anns, setAnns, accts, setAccts, go, view, dark, toggleDark, logout }
   return (
     <>
       <header className="nav">
@@ -69,7 +69,7 @@ export default function App() {
       {open && (
         <div className="card pop" ref={pop}>
           {guest && <p className="mut">Mode tamu · hanya bisa melihat</p>}
-          {role === 'siswa' && <button className="lnk2" onClick={() => { setOpen(false); go('profile', { name: me }) }}>Profil saya</button>}
+          {role === 'siswa' && <button className="lnk2" onClick={() => { setOpen(false); go('profile', { uid: meId }) }}>Profil saya</button>}
           {!guest && <button className="lnk2" onClick={() => { setOpen(false); go('settings') }}>Pengaturan</button>}
           <label className="ck"><input type="checkbox" checked={dark} onChange={toggleDark} />Mode gelap</label>
         </div>
@@ -139,7 +139,7 @@ function Detail({ works, upd, view, go, guest, logout, role }) {
         <div className="card pad">
           <Badge k="ok">✓ Disetujui guru</Badge>
           <h2 style={{ marginTop: 8 }}>{w.title}</h2>
-          <p><button className="lnk2" style={{ display: 'inline' }} onClick={() => go('profile', { name: w.by })}>{disp(w.by, role)}</button> <span className="mut">· {w.cls}</span></p>
+          <p><button className="lnk2" style={{ display: 'inline' }} onClick={() => go('profile', { uid: w.uid })}>{disp(w.by, role)}</button> <span className="mut">· {w.cls}</span></p>
           <p className="mut">{w.desc}</p><p className="mut">Kategori: {w.cat}</p>
           {w.alt && <p className="mut">Teks alternatif: {w.alt}</p>}
           <div className="row" style={{ margin: '12px 0' }}>
@@ -162,7 +162,7 @@ function Detail({ works, upd, view, go, guest, logout, role }) {
   )
 }
 
-function Upload({ works, setWorks, upd, view, go, me }) {
+function Upload({ works, setWorks, upd, view, go, me, meId, myCls }) {
   const ed = works.find(x => x.id === view.id)
   const [f, setF] = useState(ed || { title: '', desc: '', cat: '', alt: '', file: 'berkas-sebelumnya' })
   const [file, setFile] = useState(ed ? 'berkas-sebelumnya' : '')
@@ -188,7 +188,7 @@ function Upload({ works, setWorks, upd, view, go, me }) {
       return
     }
     const data = { title: f.title, desc: f.desc, cat: f.cat, alt: f.alt, status: 'pending', note: '' }
-    if (ed) upd(ed.id, data); else setWorks([{ ...data, id: Date.now(), by: me, cls: 'XI TITL 2', likes: 0 }, ...works])
+    if (ed) upd(ed.id, data); else setWorks([{ ...data, id: Date.now(), uid: meId, by: me, cls: myCls, likes: 0 }, ...works])
     go('mine')
   }
   return (
@@ -215,8 +215,8 @@ function Upload({ works, setWorks, upd, view, go, me }) {
   )
 }
 
-function Mine({ works, go, me }) {
-  const mine = works.filter(w => w.by === me)
+function Mine({ works, go, meId }) {
+  const mine = works.filter(w => w.uid === meId)
   return (
     <section>
       <h2>Karya saya</h2>
@@ -327,11 +327,11 @@ function Admin({ works, accts, setAccts }) {
   )
 }
 
-function Profile({ works, view, go, me, guest, role }) {
-  const name = view.name
-  const shown = disp(name, role)
-  const mine = works.filter(w => w.by === name && w.status === 'approved')
-  const first = works.find(w => w.by === name)
+function Profile({ works, view, go, meId, guest, role }) {
+  const user = userById(view.uid)
+  const shown = disp(user ? user.name : 'Siswa', role)
+  const mine = works.filter(w => w.uid === view.uid && w.status === 'approved')
+  const first = works.find(w => w.uid === view.uid)
   const [fol, setFol] = useState(false)
   return (
     <section>
@@ -341,7 +341,7 @@ function Profile({ works, view, go, me, guest, role }) {
         <div className="pad row">
           <span className="av big" aria-hidden="true">{initials(shown)}</span>
           <div className="sp"><h2 style={{ margin: 0 }}>{shown}</h2><div className="mut">{first ? first.cls : ''}</div><Badge k="ok">✓ Terbuka untuk umpan balik</Badge></div>
-          {name !== me && !guest && <button className={'btn' + (fol ? ' o' : '')} aria-pressed={fol} onClick={() => setFol(!fol)}>{fol ? 'Mengikuti' : 'Ikuti'}</button>}
+          {view.uid !== meId && !guest &&<button className={'btn' + (fol ? ' o' : '')} aria-pressed={fol} onClick={() => setFol(!fol)}>{fol ? 'Mengikuti' : 'Ikuti'}</button>}
         </div>
         <div className="pad row"><b>{mine.length}</b><span className="mut">karya disetujui</span><b>{148 + (fol ? 1 : 0)}</b><span className="mut">pengikut</span></div>
       </div>
