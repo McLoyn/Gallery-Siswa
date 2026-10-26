@@ -20,15 +20,58 @@ const Field = ({ id, label, error, group, children }) => (
   </div>
 )
 const errProps = (id, error) => ({ id, 'aria-invalid': !!error, 'aria-describedby': error ? id + '-err' : undefined })
+const NotFound = ({ go }) => (
+  <section>
+    <h2>Halaman tidak ditemukan</h2>
+    <p className="mut">Tautan ini tidak valid, atau karyanya belum disetujui.</p>
+    <button className="btn" style={{ marginTop: 12 }} onClick={() => go('home')}>Ke beranda</button>
+  </section>
+)
+
+// Penyimpanan lokal. Dibungkus try/catch karena bisa dinonaktifkan (mode privat, data situs diblokir).
+const SESSION_KEY = 'gs-session'
+const THEME_KEY = 'gs-theme'
+const readStore = k => { try { return window.localStorage.getItem(k) } catch { return null } }
+const store = (k, v) => { try { if (v == null) window.localStorage.removeItem(k); else window.localStorage.setItem(k, v) } catch { /* abaikan */ } }
+// Sesi yang tersimpan diverifikasi ulang ke data pengguna, bukan dipercaya begitu saja.
+function loadSession() {
+  try {
+    const s = JSON.parse(readStore(SESSION_KEY) || 'null')
+    if (!s) return null
+    if (s.role === 'tamu') return { role: 'tamu', name: 'Tamu' }
+    const u = userById(s.id)
+    return u && u.role === s.role ? { id: u.id, role: u.role, name: u.name, cls: u.cls } : null
+  } catch { return null }
+}
+const loadDark = () => {
+  const t = readStore(THEME_KEY)
+  return t ? t === 'dark' : (window.matchMedia?.('(prefers-color-scheme: dark)').matches ?? false)
+}
+
+// Routing berbasis hash: #/detail/3, #/profile/u1, #/upload/8, #/mine, dst. Tanpa dependensi tambahan.
+const DEFAULT = { siswa: 'home', guru: 'queue', admin: 'admin', tamu: 'home' }
+const ALLOWED = {
+  siswa: ['home', 'detail', 'upload', 'mine', 'profile', 'settings'],
+  guru: ['queue', 'anns', 'home', 'detail', 'profile', 'settings'],
+  admin: ['admin', 'anns', 'home', 'detail', 'profile', 'settings'],
+  tamu: ['home', 'detail', 'profile'],
+}
+const toHash = (n, p = {}) => '#/' + n + (n === 'profile' ? '/' + p.uid : p.id != null ? '/' + p.id : '')
+const parseHash = h => {
+  const [n = '', a] = h.replace(/^#\/?/, '').split('/')
+  if (n === 'detail' || n === 'upload') return { n, id: a ? Number(a) : undefined }
+  if (n === 'profile') return { n, uid: a }
+  return { n }
+}
 
 export default function App() {
-  const [session, setSession] = useState(null) // { role: 'siswa' | 'guru' | 'admin' | 'tamu', id, name, cls } (tamu tidak punya id)
-  const [view, setView] = useState({ n: 'home' })
+  const [session, setSession] = useState(loadSession) // { role: 'siswa' | 'guru' | 'admin' | 'tamu', id, name, cls } (tamu tidak punya id)
+  const [hash, setHash] = useState(() => window.location.hash)
   const [works, setWorks] = useState(W0)
   const [anns, setAnns] = useState(A0)
   const [accts, setAccts] = useState(ACC0)
   const [open, setOpen] = useState(false)
-  const [dark, setDark] = useState(false)
+  const [dark, setDark] = useState(loadDark)
   const pop = useRef(null)
   const avBtn = useRef(null)
 
@@ -42,23 +85,47 @@ export default function App() {
     return () => { document.removeEventListener('keydown', onKey); document.removeEventListener('mousedown', onDown) }
   }, [open])
 
-  const toggleDark = () => { const t = !dark; setDark(t); document.documentElement.dataset.theme = t ? 'dark' : 'light' }
-  const go = (n, p = {}) => { setView({ n, ...p }); window.scrollTo(0, 0) }
-  const login = s => { setSession(s); setOpen(false); setView({ n: { siswa: 'home', guru: 'queue', admin: 'admin', tamu: 'home' }[s.role] }); window.scrollTo(0, 0) }
-  const logout = () => { setSession(null); setOpen(false); setView({ n: 'home' }) }
+  // Ikuti perubahan URL (tombol Back/Forward, tautan yang dibagikan) dan gulir ke atas tiap pindah halaman
+  useEffect(() => {
+    const onHash = () => setHash(window.location.hash)
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+  useEffect(() => { window.scrollTo(0, 0) }, [hash])
+
+  // Tema: terapkan ke halaman dan ingat pilihannya
+  useEffect(() => {
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+    store(THEME_KEY, dark ? 'dark' : 'light')
+  }, [dark])
+
+  // Akun yang dinonaktifkan admin langsung kehilangan sesinya (tidak menunggu logout)
+  const sess = session && (session.role === 'tamu' || accts.find(a => a.id === session.id)?.on !== false) ? session : null
+  useEffect(() => { store(SESSION_KEY, sess ? JSON.stringify(sess) : null) }, [sess])
+
+  const toggleDark = () => setDark(d => !d)
+  const go = (n, p = {}) => {
+    const h = toHash(n, p)
+    if (window.location.hash === h) window.scrollTo(0, 0); else window.location.hash = h
+  }
+  const login = s => { setSession(s); setOpen(false); window.location.hash = toHash(DEFAULT[s.role]) }
+  const logout = () => { setSession(null); setOpen(false); window.location.hash = '' }
   const upd = (id, patch) => setWorks(ws => ws.map(w => (w.id === id ? { ...w, ...patch } : w)))
 
-  if (!session) return <Login accts={accts} onLogin={login} />
+  if (!sess) return <Login accts={accts} onLogin={login} />
 
-  const { role, name: me, id: meId, cls: myCls } = session
+  const { role, name: me, id: meId, cls: myCls } = sess
   const guest = role === 'tamu'
+  // Halaman yang tidak boleh dibuka peran ini (mis. siswa membuka #/queue) dialihkan ke halaman awal peran
+  const parsed = parseHash(hash)
+  const view = ALLOWED[role].includes(parsed.n) ? parsed : { n: DEFAULT[role] }
   const menu = { siswa: [['home', 'Jelajahi'], ['mine', 'Karya saya']], guru: [['queue', 'Antrean tinjauan'], ['anns', 'Pengumuman']], admin: [['admin', 'Ringkasan'], ['anns', 'Pengumuman']], tamu: [['home', 'Jelajahi']] }[role]
   const V = { home: Home, detail: Detail, upload: Upload, mine: Mine, queue: Queue, anns: Anns, admin: Admin, profile: Profile, settings: Settings }[view.n]
   const P = { role, me, meId, myCls, guest, works, setWorks, upd, anns, setAnns, accts, setAccts, go, view, dark, toggleDark, logout }
   return (
     <>
       <header className="nav">
-        <button type="button" className="brand" onClick={() => login(session)}>Galeri Siswa</button>
+        <button type="button" className="brand" onClick={() => go(DEFAULT[role])}>Galeri Siswa</button>
         {menu.map(([n, l]) => <button key={n} className={'lnk' + (view.n === n ? ' on' : '')} aria-current={view.n === n ? 'page' : undefined} onClick={() => go(n)}>{l}</button>)}
         <span className="sp" />
         {guest
@@ -131,6 +198,8 @@ function Detail({ works, upd, view, go, guest, logout, role }) {
   const [liked, setLiked] = useState(false)
   const [c, setC] = useState('')
   const [sent, setSent] = useState(false)
+  // Hanya karya yang sudah disetujui yang boleh dibuka lewat tautan
+  if (!w || w.status !== 'approved') return <NotFound go={go} />
   return (
     <section>
       <button className="btn g" onClick={() => go('home')}>← Kembali</button>
@@ -191,6 +260,8 @@ function Upload({ works, setWorks, upd, view, go, me, meId, myCls }) {
     if (ed) upd(ed.id, data); else setWorks([{ ...data, id: Date.now(), uid: meId, by: me, cls: myCls, likes: 0 }, ...works])
     go('mine')
   }
+  // Hanya pemilik yang boleh memperbaiki karyanya sendiri
+  if (view.id !== undefined && (!ed || ed.uid !== meId)) return <NotFound go={go} />
   return (
     <section style={{ maxWidth: 720 }}>
       <h2>{ed ? 'Perbaiki karya' : 'Ceritakan ide di balik karyamu'}</h2>
@@ -333,6 +404,7 @@ function Profile({ works, view, go, meId, guest, role }) {
   const mine = works.filter(w => w.uid === view.uid && w.status === 'approved')
   const first = works.find(w => w.uid === view.uid)
   const [fol, setFol] = useState(false)
+  if (!user) return <NotFound go={go} />
   return (
     <section>
       <button className="btn g" onClick={() => go('home')}>← Kembali</button>
